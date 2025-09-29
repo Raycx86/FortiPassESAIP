@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Captcha simple</title>
+  <style>
+    :root{--bg:#0f1724;--card:#111827;--accent:#10b981;--muted:#94a3b8}
+    body{background:linear-gradient(135deg,#071029 0%, #0b1320 100%);font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;color:#e6eef8}
+    .card{background:rgba(255,255,255,0.03);padding:20px;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.6);width:420px;}
+    h1{font-size:18px;margin:0 0 12px}
+    .captcha-row{display:flex;gap:12px;align-items:center}
+    canvas{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:6px;}
+    input[type="text"]{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    button{padding:10px 12px;border-radius:8px;border:none;background:var(--accent);color:#042018;font-weight:600;cursor:pointer}
+    .muted{color:var(--muted);font-size:13px;margin-top:10px}
+    .ok{color:#10b981;font-weight:700}
+    .bad{color:#fb7185;font-weight:700}
+    .controls{display:flex;gap:8px;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Captcha simple — vérifie que t'es pas un bot</h1>
+    <div class="captcha-row">
+      <canvas id="captchaCanvas" width="250" height="80" aria-label="captcha image"></canvas>
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <input id="captchaInput" type="text" placeholder="Tape le texte" autocomplete="off" />
+        <div style="display:flex;gap:8px">
+          <button id="verifyBtn">Vérifier</button>
+          <button id="refreshBtn" type="button">Rafraîchir</button>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <small class="muted">Astuce: les lettres sont insensibles à la casse. Tu peux rafraîchir pour un nouveau code.</small>
+    </div>
+    <div id="result" style="margin-top:10px"></div>
+  </div>
+
+  <script>
+    // Captcha simple (pas pour la prod sécurisée) — frontend only
+    const canvas = document.getElementById('captchaCanvas');
+    const ctx = canvas.getContext('2d');
+    const input = document.getElementById('captchaInput');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const result = document.getElementById('result');
+
+    // Configuration
+    const length = 6;
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz0123456789&é?!$à'; // évite 0,O,1,l
+    let currentCode = '';
+
+    function randInt(min, max){ return Math.floor(Math.random()*(max-min+1))+min }
+    function randChoice(s){ return s.charAt(randInt(0, s.length-1)) }
+
+    function generateCode(){
+      let s = '';
+      for(let i=0;i<length;i++) s += randChoice(chars);
+      return s;
+    }
+
+    function drawCaptcha(text){
+      // clear
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // background noise
+      ctx.fillStyle = '#0b1220';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      // add random lines
+      for(let i=0;i<6;i++){
+        ctx.beginPath();
+        ctx.moveTo(randInt(0,canvas.width), randInt(0,canvas.height));
+        ctx.lineTo(randInt(0,canvas.width), randInt(0,canvas.height));
+        ctx.lineWidth = 1 + Math.random()*1.5;
+        ctx.strokeStyle = `rgba(${randInt(60,200)},${randInt(60,200)},${randInt(60,200)},${0.12 + Math.random()*0.3})`;
+        ctx.stroke();
+      }
+
+      // draw text with per-char transform
+      const baseX = 20;
+      const baseY = canvas.height/2 + 10;
+      ctx.textBaseline = 'middle';
+
+      for(let i=0;i<text.length;i++){
+        const ch = text[i];
+        const fontSize = randInt(26,36);
+        ctx.font = `${fontSize}px sans-serif`;
+        const x = baseX + i*(canvas.width-40)/text.length + randInt(-4,6);
+        const y = baseY + randInt(-6,6);
+        ctx.save();
+        const angle = (Math.random()-0.5) * 0.6; // rotate each char slightly
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = `rgba(${randInt(140,255)},${randInt(140,255)},${randInt(140,255)},${0.85})`;
+        ctx.fillText(ch, 0, 0);
+        // slight stroke for contrast
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = 'rgba(10,10,12,0.25)';
+        ctx.strokeText(ch, 0, 0);
+        ctx.restore();
+      }
+
+      // add dots noise
+      for(let i=0;i<60;i++){
+        ctx.beginPath();
+        ctx.arc(randInt(0,canvas.width), randInt(0,canvas.height), Math.random()*1.4, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(${randInt(100,220)},${randInt(100,220)},${randInt(100,220)},${0.12 + Math.random()*0.25})`;
+        ctx.fill();
+      }
+
+      // add a wave line across
+      ctx.beginPath();
+      const amp = randInt(6,12);
+      ctx.moveTo(0, canvas.height/2);
+      for(let x=0;x<=canvas.width;x+=10){
+        ctx.lineTo(x, canvas.height/2 + Math.sin(x/15 + Math.random()*1.2)*amp);
+      }
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.stroke();
+    }
+
+    function refresh(){
+      currentCode = generateCode();
+      drawCaptcha(currentCode);
+      input.value = '';
+      result.textContent = '';
+    }
+
+    verifyBtn.addEventListener('click', ()=>{
+      const guess = input.value.trim();
+      if(!guess){ result.innerHTML = '<span class="bad">Entre le texte affiché.</span>'; return }
+      if(guess.toLowerCase() === currentCode.toLowerCase()){
+        result.innerHTML = '<span class="ok">OK — vous n\'êtes pas un robot</span>';
+      } else {
+        result.innerHTML = '<span class="bad">Mauvais, réessaie ou rafraîchis.</span>';
+      }
+    });
+
+    refreshBtn.addEventListener('click', refresh);
+
+    // initial
+    refresh();
+
+    // Optional: allow Enter to submit
+    input.addEventListener('keyup', (e)=>{ if(e.key === 'Enter') verifyBtn.click() });
+
+    // Expose a method to get the current code (useful for tests). In real usage, verify on server.
+    window.__testing__ = { getCode: ()=>currentCode };
+  </script>
+</body>
+</html>

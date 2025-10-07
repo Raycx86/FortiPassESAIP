@@ -2,6 +2,9 @@ import string
 import pyfiglet
 from simple_term_menu import TerminalMenu
 import json
+import secrets
+import math
+
 
 CHEMIN_ROCKYOU = "rockyou.txt"
 PARAMS_FILE = "settings.json"
@@ -54,7 +57,9 @@ def checkLetterRep(password):
     return repet
 
 def checkCommonWord(password):
-    return password.strip() in wordlist_rockyou
+    if not password:
+        return False
+    return password.strip().lower() in wordlist_rockyou
 
 def analyze_charsets(password):
     """Analyse les types de caractères présents dans le mot de passe."""
@@ -91,7 +96,7 @@ def password_matches_settings(password, settings):
         "ok": len(missing_required) == 0
     }
 
-def checkPswd(password, settings):
+def checkPswd(password, settings, alphabet):
     password = password.strip()
 
     # --- Vérification des mots de passe communs
@@ -99,7 +104,7 @@ def checkPswd(password, settings):
         if checkCommonWord(password):
             print("⚠️ Common word found")
         else:
-            print("✅ Common word not found")
+            print("✅ Common password not found")
 
     # --- Vérification de la longueur
     min_len = settings.get("Password length", 8)
@@ -128,6 +133,11 @@ def checkPswd(password, settings):
         print("⚠️ Repeated letters detected")
     else:
         print("✅ No repeated letters found")
+
+    # Calcul de l'entrpy :
+    charset_size = len(alphabet)
+    entropy = estimate_entropy_bits(len(password), charset_size)
+    print(f"Entropy: {entropy:.1f} bits")
 
 def alphabet_menu(settings):
     while True:
@@ -226,7 +236,54 @@ def settings_menu(fichier=PARAMS_FILE):
 
     return settings
 
+def estimate_entropy_bits(length: int, charset_size: int) -> float:
+    if charset_size <= 1:
+        return 0.0
+    return length * math.log2(charset_size)
+
+def generate_password(settings, alphabet, max_attempts=500):
+    longueur = settings.get("Password length", 8)
+    if longueur <= 0:
+        raise ValueError("La longueur doit être > 0")
+    if not alphabet:
+        raise ValueError("Au moins un type de caractère doit être activé.")
+
+    rng = secrets.SystemRandom()
+    attempt = 0
+
+    while attempt < max_attempts:
+        attempt += 1
+        pw = "".join(rng.choice(alphabet) for _ in range(longueur))
+        charset_size = len(alphabet)
+        entropy = estimate_entropy_bits(len(pw), charset_size)
+
+        return {
+                "password": pw,
+                "length": len(pw),
+                "charset_size": charset_size,
+                "entropy_bits": entropy,
+                "attempts": attempt,
+            }
+
 def main():
+    # Load settings once at startup
+    try:
+        with open(PARAMS_FILE, "r") as f:
+            settings = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        # If file doesn't exist, create default settings
+        settings = {
+            "Common password detection": True,
+            "Max repeating letters": 2,
+            "Password length": 16,
+            "Alphabet lowercase": True,
+            "Alphabet uppercase": True,
+            "Alphabet digits": True,
+            "Alphabet specials": False
+        }
+        with open(PARAMS_FILE, "w") as f:
+            json.dump(settings, f, indent=4)
+    
     while True:
         FortiPass = pyfiglet.figlet_format("FortiPass", font='bubble')
         print(FortiPass)
@@ -240,16 +297,24 @@ def main():
         print(f"You chose : {options[menu_entry_index]}")
 
         if menu_entry_index == 0:
-            # Charger settings avant check
+            # Reload settings before check (in case they were changed)
             with open(PARAMS_FILE, "r") as f:
                 settings = json.load(f)
-            checkPswd(password=input("Password ? : "), settings=settings)
+                alphabet = build_alphabet(settings)
+            checkPswd(password=input("Password ? : "), settings=settings, alphabet=alphabet)
 
         elif menu_entry_index == 1:
-            print("⚠️ Fonction generatePswd() pas encore implémentée")
+            # Reload settings before generating
+            with open(PARAMS_FILE, "r") as f:
+                settings = json.load(f)
+            alphabet = build_alphabet(settings)
+            result = generate_password(settings=settings, alphabet=alphabet)
+            print(f"\n🔐 Generated password: {result['password']}")
+            print(f"Length: {result['length']} | Charset size: {result['charset_size']}")
+            print(f"Entropy: {result['entropy_bits']:.1f} bits | Attempts: {result['attempts']}")
 
         elif menu_entry_index == 2:
-            settings_menu()  # retour direct au menu
+            settings = settings_menu()  # Update settings and reload them
 
         elif menu_entry_index == 3:
             print("💡 Projet FortiPass - by You")

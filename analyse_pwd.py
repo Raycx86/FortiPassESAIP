@@ -30,6 +30,7 @@ FortiPass = pyfiglet.figlet_format(f"{NAME}", font='univers')
 print(FortiPass)
 wordlist_rockyou = rockYouLoader(CHEMIN_ROCKYOU)
 print(f"Rockyou chargé. Nombre de mots de passe uniques : {len(wordlist_rockyou):,}")
+
 def hash_password(password: str, salt: bytes = None, iterations: int = 200_000):
     if salt is None:
         salt = os.urandom(16)
@@ -225,6 +226,7 @@ def settings_menu(fichier=PARAMS_FILE):
             settings[key] = value
 
     while True:
+        clear()
         options = [
             f"[s] Check Password saving [{'ON' if settings['Check Password saving'] else 'OFF'}]",
             f"[d] Common password detection [{'ON' if settings['Common password detection'] else 'OFF'}]",
@@ -305,7 +307,6 @@ def generate_password(settings, alphabet, max_attempts=500):
                 "entropy_bits": entropy,
                 "attempts": attempt,
             }
-
 
 def main():
     # Load settings once at startup

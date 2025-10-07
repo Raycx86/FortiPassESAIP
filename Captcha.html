@@ -133,9 +133,9 @@
       const guess = input.value.trim();
       if(!guess){ result.innerHTML = '<span class="bad">Entre le texte affiché.</span>'; return }
       if(guess.toLowerCase() === currentCode.toLowerCase()){
-        result.innerHTML = '<span class="ok">OK — vous n\'êtes pas un robot</span>';
+        result.innerHTML = '<span class="ok">Ça va t\'es pas un bot.</span>';
       } else {
-        result.innerHTML = '<span class="bad">Mauvais, réessaie ou rafraîchis.</span>';
+        result.innerHTML = '<span class="bad">ALERTE INTRUT !</span>';
       }
     });
 
@@ -152,3 +152,4 @@
   </script>
 </body>
 </html>
+

@@ -4,11 +4,17 @@ from simple_term_menu import TerminalMenu
 import json
 import secrets
 import math
+import hashlib
+import binascii
+import os
+import getpass
 
-
+NAME = "Safe\nPass"
 CHEMIN_ROCKYOU = "rockyou.txt"
 PARAMS_FILE = "settings.json"
 
+def clear():
+    print("\033c", end="")
 # Charger rockyou
 def rockYouLoader(chemin_fichier):
     try:
@@ -19,8 +25,31 @@ def rockYouLoader(chemin_fichier):
         print(f"Erreur: Le fichier {chemin_fichier} est introuvable.")
         return set()
 
+clear()
+FortiPass = pyfiglet.figlet_format(f"{NAME}", font='univers')
+print(FortiPass)
 wordlist_rockyou = rockYouLoader(CHEMIN_ROCKYOU)
 print(f"Rockyou chargé. Nombre de mots de passe uniques : {len(wordlist_rockyou):,}")
+def hash_password(password: str, salt: bytes = None, iterations: int = 200_000):
+    if salt is None:
+        salt = os.urandom(16)
+
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+
+    return {
+        "salt": binascii.hexlify(salt).decode(),
+        "iterations": iterations,
+        "hash": binascii.hexlify(dk).decode(),
+    }
+
+def verify_password(stored: dict, password_attempt: str) -> bool:
+    salt = binascii.unhexlify(stored["salt"])
+
+    iterations = int(stored["iterations"])
+
+    dk = hashlib.pbkdf2_hmac("sha256", password_attempt.encode(), salt, iterations)
+
+    return binascii.hexlify(dk).decode() == stored["hash"]
 
 def build_alphabet(settings):
     """Construit l'alphabet selon les paramètres"""
@@ -61,7 +90,7 @@ def checkCommonWord(password):
         return False
     return password.strip().lower() in wordlist_rockyou
 
-def analyze_charsets(password):
+def checkCharsets(password):
     """Analyse les types de caractères présents dans le mot de passe."""
     pw = password or ""
     present = {
@@ -77,7 +106,7 @@ def analyze_charsets(password):
 
 def password_matches_settings(password, settings):
     """Vérifie si le mot de passe respecte les catégories activées dans les paramètres."""
-    has = analyze_charsets(password)
+    has = checkCharsets(password)
     requirements = {
         "Alphabet lowercase": "lowercase",
         "Alphabet uppercase": "uppercase",
@@ -142,11 +171,11 @@ def checkPswd(password, settings, alphabet):
 def alphabet_menu(settings):
     while True:
         options = [
-            f"Alphabet lowercase [{'ON' if settings['Alphabet lowercase'] else 'OFF'}]",
-            f"Alphabet uppercase [{'ON' if settings['Alphabet uppercase'] else 'OFF'}]",
-            f"Alphabet digits [{'ON' if settings['Alphabet digits'] else 'OFF'}]",
-            f"Alphabet specials [{'ON' if settings['Alphabet specials'] else 'OFF'}]",
-            "⬅️ Retour"
+            f"[l] Alphabet lowercase [{'ON' if settings['Alphabet lowercase'] else 'OFF'}]",
+            f"[u] Alphabet uppercase [{'ON' if settings['Alphabet uppercase'] else 'OFF'}]",
+            f"[d] Alphabet digits [{'ON' if settings['Alphabet digits'] else 'OFF'}]",
+            f"[s] Alphabet specials [{'ON' if settings['Alphabet specials'] else 'OFF'}]",
+            "[q] ⬅️ Retour"
         ]
 
         terminal_menu = TerminalMenu(options)
@@ -173,6 +202,7 @@ def alphabet_menu(settings):
 def settings_menu(fichier=PARAMS_FILE):
     # Valeurs par défaut
     default_settings = {
+        "Check Password saving": True,
         "Common password detection": True,
         "Max repeating letters": 2,
         "Password length": 16,
@@ -196,11 +226,12 @@ def settings_menu(fichier=PARAMS_FILE):
 
     while True:
         options = [
-            f"Common password detection [{'ON' if settings['Common password detection'] else 'OFF'}]",
-            f"Max repeating letters [{settings['Max repeating letters']}]",
-            f"Password length [{settings['Password length']}]",
-            "🔤 Alphabet Settings",
-            "💾 Sauvegarder et revenir au menu",
+            f"[s] Check Password saving [{'ON' if settings['Check Password saving'] else 'OFF'}]",
+            f"[d] Common password detection [{'ON' if settings['Common password detection'] else 'OFF'}]",
+            f"[r] Max repeating letters [{settings['Max repeating letters']}]",
+            f"[l] Password length [{settings['Password length']}]",
+            f"[a] 🔤 Alphabet Settings",
+            f"[q] 💾 Sauvegarder et revenir au menu",
         ]
 
         terminal_menu = TerminalMenu(options)
@@ -210,7 +241,10 @@ def settings_menu(fichier=PARAMS_FILE):
 
         choice = options[menu_entry_index]
 
-        if "Common password detection" in choice:
+        if "Check Password saving" in choice:
+            settings["Check Password saving"] = not settings["Check Password saving"]
+
+        elif "Common password detection" in choice:
             settings["Common password detection"] = not settings["Common password detection"]
 
         elif "Max repeating letters" in choice:
@@ -233,8 +267,15 @@ def settings_menu(fichier=PARAMS_FILE):
                 json.dump(settings, f, indent=4)
             print("\n✅ Paramètres sauvegardés :", settings)
             break
-
     return settings
+
+def check_password(password):
+    pwd2 = getpass.getpass("Retapez le mot de passe pour vérification : ")
+    if password != pwd2:
+        print("⚠️ Les mots de passe ne correspondent pas. Recommencez.")
+    else:
+        print("✅ Les mots de passe correspondent.")
+        return
 
 def estimate_entropy_bits(length: int, charset_size: int) -> float:
     if charset_size <= 1:
@@ -265,6 +306,7 @@ def generate_password(settings, alphabet, max_attempts=500):
                 "attempts": attempt,
             }
 
+
 def main():
     # Load settings once at startup
     try:
@@ -285,9 +327,9 @@ def main():
             json.dump(settings, f, indent=4)
     
     while True:
-        FortiPass = pyfiglet.figlet_format("FortiPass", font='bubble')
+        clear()
+        FortiPass = pyfiglet.figlet_format(f"{NAME}", font='univers')
         print(FortiPass)
-
         options = ["[c] Check Password", "[g] Generate Password", "[s] Settings", "[r] Credits", "[q] Quitter"]
         terminal_menu = TerminalMenu(options)
         menu_entry_index = terminal_menu.show()
@@ -302,6 +344,7 @@ def main():
                 settings = json.load(f)
                 alphabet = build_alphabet(settings)
             checkPswd(password=input("Password ? : "), settings=settings, alphabet=alphabet)
+            input("Press Enter to continue...")
 
         elif menu_entry_index == 1:
             # Reload settings before generating
@@ -311,13 +354,19 @@ def main():
             result = generate_password(settings=settings, alphabet=alphabet)
             print(f"\n🔐 Generated password: {result['password']}")
             print(f"Length: {result['length']} | Charset size: {result['charset_size']}")
-            print(f"Entropy: {result['entropy_bits']:.1f} bits | Attempts: {result['attempts']}")
+            print(f"Entropy: {result['entropy_bits']:.1f} bits")
+            if settings.get("Check Password saving", True):
+                check_password(result["password"])
+            input("Press Enter to continue...")
 
         elif menu_entry_index == 2:
             settings = settings_menu()  # Update settings and reload them
 
         elif menu_entry_index == 3:
-            print("💡 Projet FortiPass - by You")
+            print("💡 Projet SafePass - by : \nClément.H\nAlex.T\nGrégoire.H\nLucas.N\nArthur.D\nWissal.K\nMohammed.B")
+
+            input("Press Enter to continue...")
+
 
         elif menu_entry_index == 4:
             print("👋 Au revoir !")
